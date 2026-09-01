@@ -3,19 +3,23 @@ import { Header } from '../components/Header';
 import { StatsOverview } from '../components/StatsOverview';
 import { ScheduledEmailsTable } from '../components/ScheduledEmailsTable';
 import { SentEmailsTable } from '../components/SentEmailsTable';
+import { CampaignsListTable } from '../components/CampaignsListTable';
 import { ComposeModal } from '../components/ComposeModal';
 import { SlackIntegrationModal } from '../components/SlackIntegrationModal';
+import { SenderAccountsModal } from '../components/SenderAccountsModal';
 import { EmailDetailModal } from '../components/EmailDetailModal';
 import { emailService } from '../services/email.service';
-import { EmailJob, EmailStats } from '../types';
-import { Clock, CheckCircle2 } from 'lucide-react';
+import { campaignService } from '../services/campaign.service';
+import { EmailJob, EmailStats, Campaign } from '../types';
+import { Clock, CheckCircle2, Layers } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'scheduled' | 'sent'>('scheduled');
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'scheduled' | 'sent'>('scheduled');
 
   // Modals
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isSlackOpen, setIsSlackOpen] = useState(false);
+  const [isAccountsOpen, setIsAccountsOpen] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<EmailJob | null>(null);
 
   // Data States
@@ -27,6 +31,7 @@ export const DashboardPage: React.FC = () => {
     failed: 0,
   });
 
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [scheduledEmails, setScheduledEmails] = useState<EmailJob[]>([]);
   const [sentEmails, setSentEmails] = useState<EmailJob[]>([]);
   const [scheduledTotal, setScheduledTotal] = useState(0);
@@ -50,11 +55,14 @@ export const DashboardPage: React.FC = () => {
     }
   }, []);
 
-  // Fetch Emails for Active Tab
-  const fetchEmails = useCallback(async () => {
+  // Fetch Data for Active Tab
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      if (activeTab === 'scheduled') {
+      if (activeTab === 'campaigns') {
+        const camps = await campaignService.getCampaigns();
+        setCampaigns(camps);
+      } else if (activeTab === 'scheduled') {
         const res = await emailService.getScheduledEmails(1, 50, searchQuery);
         setScheduledEmails(res.emails || []);
         setScheduledTotal(res.total || 0);
@@ -64,7 +72,7 @@ export const DashboardPage: React.FC = () => {
         setSentTotal(res.total || 0);
       }
     } catch (e) {
-      console.warn('Failed to load emails:', e);
+      console.warn('Failed to load data:', e);
     } finally {
       setIsLoading(false);
     }
@@ -73,17 +81,17 @@ export const DashboardPage: React.FC = () => {
   // Initial load and tab change
   useEffect(() => {
     fetchStats();
-    fetchEmails();
-  }, [fetchStats, fetchEmails]);
+    fetchData();
+  }, [fetchStats, fetchData]);
 
-  // Polling interval every 3 seconds for instant UI updates on queue dispatch
+  // Polling interval every 3 seconds for real-time queue synchronization
   useEffect(() => {
     const interval = setInterval(() => {
       fetchStats();
-      fetchEmails();
+      fetchData();
     }, 3000);
     return () => clearInterval(interval);
-  }, [fetchStats, fetchEmails]);
+  }, [fetchStats, fetchData]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -91,6 +99,7 @@ export const DashboardPage: React.FC = () => {
       <Header
         onOpenComposeModal={() => setIsComposeOpen(true)}
         onOpenSlackModal={() => setIsSlackOpen(true)}
+        onOpenAccountsModal={() => setIsAccountsOpen(true)}
       />
 
       {/* Main Container */}
@@ -145,10 +154,28 @@ export const DashboardPage: React.FC = () => {
               {stats.sent}
             </span>
           </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('campaigns');
+              setSearchQuery('');
+            }}
+            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'campaigns'
+                ? 'border-purple-500 text-purple-400 bg-purple-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Campaigns</span>
+            <span className="px-2 py-0.5 rounded-full text-xs bg-slate-800 text-slate-300 font-mono">
+              {campaigns.length}
+            </span>
+          </button>
         </div>
 
-        {/* Tab Content Table */}
-        {activeTab === 'scheduled' ? (
+        {/* Tab Content Tables */}
+        {activeTab === 'scheduled' && (
           <ScheduledEmailsTable
             emails={scheduledEmails}
             isLoading={isLoading}
@@ -156,13 +183,15 @@ export const DashboardPage: React.FC = () => {
             onSearchChange={setSearchQuery}
             onRefresh={() => {
               fetchStats();
-              fetchEmails();
+              fetchData();
             }}
             onComposeClick={() => setIsComposeOpen(true)}
             onSelectEmail={(email) => setSelectedEmail(email)}
             totalCount={scheduledTotal}
           />
-        ) : (
+        )}
+
+        {activeTab === 'sent' && (
           <SentEmailsTable
             emails={sentEmails}
             isLoading={isLoading}
@@ -170,10 +199,22 @@ export const DashboardPage: React.FC = () => {
             onSearchChange={setSearchQuery}
             onRefresh={() => {
               fetchStats();
-              fetchEmails();
+              fetchData();
             }}
             onSelectEmail={(email) => setSelectedEmail(email)}
             totalCount={sentTotal}
+          />
+        )}
+
+        {activeTab === 'campaigns' && (
+          <CampaignsListTable
+            campaigns={campaigns}
+            isLoading={isLoading}
+            onRefresh={() => {
+              fetchStats();
+              fetchData();
+            }}
+            onComposeClick={() => setIsComposeOpen(true)}
           />
         )}
       </main>
@@ -184,13 +225,18 @@ export const DashboardPage: React.FC = () => {
         onClose={() => setIsComposeOpen(false)}
         onSuccess={() => {
           fetchStats();
-          fetchEmails();
+          fetchData();
         }}
       />
 
       <SlackIntegrationModal
         isOpen={isSlackOpen}
         onClose={() => setIsSlackOpen(false)}
+      />
+
+      <SenderAccountsModal
+        isOpen={isAccountsOpen}
+        onClose={() => setIsAccountsOpen(false)}
       />
 
       <EmailDetailModal

@@ -3,7 +3,7 @@ import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { LeadItem, ScheduleFormData } from '../types';
 import { campaignService } from '../services/campaign.service';
-import { Upload, FileText, CheckCircle2, AlertCircle, Clock, Zap, Shield, Mail, Sparkles, Tag, Eye } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertCircle, Clock, Zap, Shield, Mail, Sparkles, Tag, Eye, Split, RefreshCw } from 'lucide-react';
 
 interface ComposeModalProps {
   isOpen: boolean;
@@ -13,7 +13,7 @@ interface ComposeModalProps {
 
 const EMAIL_TEMPLATES = [
   {
-    name: 'Outbox Labs / ReachInbox Assignment',
+    name: 'ReachInbox Hiring Assignment',
     subject: 'ReachInbox Hiring Assignment – Full-Stack Email Job Scheduler',
     body: `Hi {{name}},\n\nWith reference to the Software Development Intern opportunity at ReachInbox (Outbox Labs), we are sharing the assignment details.\n\nOur system uses BullMQ + Redis for distributed delayed scheduling without cron, enforces sliding hourly rate limits, and dispatches real-time Slack notifications.\n\nBest regards,\nReachInbox Engineering Team`,
   },
@@ -34,6 +34,15 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, onS
   const [body, setBody] = useState('');
   const [senderEmail, setSenderEmail] = useState('outreach@reachinbox.ai');
   const [senderName, setSenderName] = useState('ReachInbox SDR');
+
+  // A/B Testing
+  const [isABTest, setIsABTest] = useState(false);
+  const [subjectB, setSubjectB] = useState('');
+  const [bodyB, setBodyB] = useState('');
+
+  // Multi-inbox rotation & compliance
+  const [rotateSenders, setRotateSenders] = useState(false);
+  const [includeUnsubscribe, setIncludeUnsubscribe] = useState(true);
 
   // Leads
   const [leads, setLeads] = useState<LeadItem[]>([]);
@@ -101,8 +110,12 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, onS
   };
 
   // Insert Variable Tag
-  const insertVariable = (tag: string) => {
-    setBody((prev) => `${prev} ${tag}`);
+  const insertVariable = (tag: string, targetVariant: 'A' | 'B' = 'A') => {
+    if (targetVariant === 'A') {
+      setBody((prev) => `${prev} ${tag}`);
+    } else {
+      setBodyB((prev) => `${prev} ${tag}`);
+    }
   };
 
   // Submit Schedule
@@ -116,6 +129,10 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, onS
       setError('Please write an email body.');
       return;
     }
+    if (isABTest && (!subjectB.trim() || !bodyB.trim())) {
+      setError('Please provide Subject B and Body B for A/B testing.');
+      return;
+    }
     if (leads.length === 0) {
       setError('Please upload a CSV/text file or enter at least one valid lead email.');
       return;
@@ -127,6 +144,11 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, onS
     const payload: ScheduleFormData = {
       subject,
       body,
+      subjectB: isABTest ? subjectB : undefined,
+      bodyB: isABTest ? bodyB : undefined,
+      isABTest,
+      includeUnsubscribe,
+      rotateSenders,
       senderEmail,
       senderName,
       leads,
@@ -139,6 +161,8 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, onS
       await campaignService.scheduleCampaign(payload);
       setSubject('');
       setBody('');
+      setSubjectB('');
+      setBodyB('');
       setLeads([]);
       setRawTextLeads('');
       setFileName(null);
@@ -151,7 +175,6 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, onS
     }
   };
 
-  // First lead preview helper
   const sampleLead = leads[0] || { name: 'Alex Johnson', email: 'alex@growthlab.com' };
   const previewSubject = subject.replace(/{{name}}/gi, sampleLead.name || 'there').replace(/{{email}}/gi, sampleLead.email);
   const previewBody = body.replace(/{{name}}/gi, sampleLead.name || 'there').replace(/{{email}}/gi, sampleLead.email);
@@ -192,79 +215,161 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, onS
           </div>
         </div>
 
-        {/* Sender Info */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Sender Account</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+        {/* Sender Info & Multi-Inbox Rotation */}
+        <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Primary Sender Account</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  type="email"
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  required
+                  className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:ring-2 focus:ring-indigo-500"
+                  placeholder="outreach@reachinbox.ai"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Sender Display Name</label>
               <input
-                type="email"
-                value={senderEmail}
-                onChange={(e) => setSenderEmail(e.target.value)}
-                required
-                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
-                placeholder="outreach@reachinbox.ai"
+                type="text"
+                value={senderName}
+                onChange={(e) => setSenderName(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:ring-2 focus:ring-indigo-500"
+                placeholder="ReachInbox SDR"
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Sender Display Name</label>
-            <input
-              type="text"
-              value={senderName}
-              onChange={(e) => setSenderName(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500"
-              placeholder="ReachInbox SDR"
-            />
+
+          <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-900 text-xs">
+            <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+              <input
+                type="checkbox"
+                checked={rotateSenders}
+                onChange={(e) => setRotateSenders(e.target.checked)}
+                className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="flex items-center gap-1">
+                <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                <strong>Rotate Senders</strong> (Round-robin across all active inboxes)
+              </span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+              <input
+                type="checkbox"
+                checked={includeUnsubscribe}
+                onChange={(e) => setIncludeUnsubscribe(e.target.checked)}
+                className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>Include CAN-SPAM Unsubscribe Link</span>
+            </label>
           </div>
         </div>
 
-        {/* Subject Line */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">Email Subject *</label>
-          <input
-            type="text"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="e.g. Quick question for {{name}}"
-            required
-            className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-medium"
-          />
+        {/* A/B Testing Toggle */}
+        <div className="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800 rounded-xl">
+          <div className="flex items-center gap-2">
+            <Split className="w-4 h-4 text-purple-400" />
+            <span className="text-xs font-bold text-slate-200">A/B Subject & Body Split Testing</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsABTest(!isABTest)}
+            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+              isABTest ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {isABTest ? 'A/B Test Enabled' : 'Enable A/B Test'}
+          </button>
         </div>
 
-        {/* Email Body & Variables */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs font-semibold text-slate-300">Email Body *</label>
+        {/* Variant A (Primary) */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold text-slate-300">
+              {isABTest ? 'Variant A (50% Traffic)' : 'Email Subject & Body'}
+            </label>
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
               <Tag className="w-3 h-3 text-indigo-400" />
-              <span>Insert Variable:</span>
+              <span>Variables:</span>
               <button
                 type="button"
-                onClick={() => insertVariable('{{name}}')}
+                onClick={() => insertVariable('{{name}}', 'A')}
                 className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[11px] font-mono border border-slate-700"
               >
                 {'{{name}}'}
               </button>
               <button
                 type="button"
-                onClick={() => insertVariable('{{email}}')}
+                onClick={() => insertVariable('{{email}}', 'A')}
                 className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[11px] font-mono border border-slate-700"
               >
                 {'{{email}}'}
               </button>
             </div>
           </div>
+          <input
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="e.g. Quick question for {{name}}"
+            required
+            className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 font-medium"
+          />
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            rows={4}
-            placeholder="Write your email here. Use {{name}} and {{email}} for dynamic lead personalization..."
+            rows={3}
+            placeholder="Write Variant A email body here..."
             required
-            className="w-full p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-y font-sans leading-relaxed"
+            className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 resize-y font-sans leading-relaxed"
           />
         </div>
+
+        {/* Variant B (If A/B Testing Enabled) */}
+        {isABTest && (
+          <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-500/30 space-y-3 animate-in fade-in">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-purple-300">Variant B (50% Traffic)</label>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                <button
+                  type="button"
+                  onClick={() => insertVariable('{{name}}', 'B')}
+                  className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-purple-300 text-[11px] font-mono border border-slate-700"
+                >
+                  {'{{name}}'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertVariable('{{email}}', 'B')}
+                  className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-purple-300 text-[11px] font-mono border border-slate-700"
+                >
+                  {'{{email}}'}
+                </button>
+              </div>
+            </div>
+            <input
+              type="text"
+              value={subjectB}
+              onChange={(e) => setSubjectB(e.target.value)}
+              placeholder="e.g. Alternative Subject: Have you seen this, {{name}}?"
+              required={isABTest}
+              className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-purple-500 font-medium"
+            />
+            <textarea
+              value={bodyB}
+              onChange={(e) => setBodyB(e.target.value)}
+              rows={3}
+              placeholder="Write Variant B alternative body copy here..."
+              required={isABTest}
+              className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-purple-500 resize-y font-sans leading-relaxed"
+            />
+          </div>
+        )}
 
         {/* Live Variable Preview Accordion */}
         {(subject || body) && (

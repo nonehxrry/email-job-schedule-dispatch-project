@@ -11,4 +11,9 @@ export const campaignService = {
     const res = await api.get('/campaigns');
     return res.data.campaigns || [];
   },
+
+  async deleteCampaign(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await api.delete(`/campaigns/${id}`);
+    return res.data;
+  },
 };

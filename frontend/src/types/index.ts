@@ -16,6 +16,10 @@ export interface EmailAccount {
   senderName: string;
   hourlyLimit: number;
   isDefault: boolean;
+  isActive?: boolean;
+  _count?: {
+    emailJobs: number;
+  };
 }
 
 export interface Campaign {
@@ -24,14 +28,24 @@ export interface Campaign {
   name: string;
   subject: string;
   body: string;
+  subjectB?: string;
+  bodyB?: string;
+  isABTest?: boolean;
   totalLeads: number;
   delayBetweenEmailsSec: number;
   hourlyLimit: number;
   startTime: string;
   status: 'SCHEDULED' | 'PROCESSING' | 'COMPLETED' | 'PAUSED';
   createdAt: string;
-  _count?: {
-    emailJobs: number;
+  stats?: {
+    total: number;
+    sent: number;
+    scheduled: number;
+    opened: number;
+    clicked: number;
+    openRate: number;
+    clickRate: number;
+    progress: number;
   };
 }
 
@@ -44,6 +58,7 @@ export interface EmailJob {
   recipientName?: string;
   subject: string;
   body: string;
+  variant?: 'A' | 'B' | null;
   scheduledAt: string;
   sentAt?: string;
   status: 'SCHEDULED' | 'SENDING' | 'SENT' | 'RESCHEDULED' | 'FAILED';
@@ -52,6 +67,14 @@ export interface EmailJob {
   errorMessage?: string;
   retryCount: number;
   rescheduledCount: number;
+
+  // Real-world tracking metrics
+  openedAt?: string;
+  openCount: number;
+  clickedAt?: string;
+  clickCount: number;
+  unsubscribedAt?: string;
+
   createdAt: string;
 }
 
@@ -71,6 +94,11 @@ export interface LeadItem {
 export interface ScheduleFormData {
   subject: string;
   body: string;
+  subjectB?: string;
+  bodyB?: string;
+  isABTest?: boolean;
+  includeUnsubscribe?: boolean;
+  rotateSenders?: boolean;
   senderEmail?: string;
   senderName?: string;
   leads: LeadItem[];

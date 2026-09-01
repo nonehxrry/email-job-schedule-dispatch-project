@@ -1,14 +1,19 @@
 import React from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from './ui/Button';
-import { Mail, Activity, LogOut, MessageSquare } from 'lucide-react';
+import { Mail, Activity, LogOut, MessageSquare, Users } from 'lucide-react';
 
 interface HeaderProps {
   onOpenSlackModal: () => void;
   onOpenComposeModal: () => void;
+  onOpenAccountsModal: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenSlackModal, onOpenComposeModal }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onOpenSlackModal,
+  onOpenComposeModal,
+  onOpenAccountsModal,
+}) => {
   const { user, logout } = useAuth();
   const bullBoardUrl = import.meta.env.VITE_BULL_BOARD_URL || 'http://localhost:5000/admin/queues';
 
@@ -32,18 +37,30 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSlackModal, onOpenComposeM
         </div>
 
         {/* Action Controls & User Info */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {/* Live BullMQ Board Link */}
           <a
             href={bullBoardUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
+            className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
             title="Open Live BullMQ Queue Monitor Dashboard"
           >
             <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
             <span>BullMQ Live Board</span>
           </a>
+
+          {/* Sender Inboxes Manager */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onOpenAccountsModal}
+            leftIcon={<Users className="w-3.5 h-3.5 text-indigo-400" />}
+            title="Manage Connected Sending Inboxes"
+          >
+            <span className="hidden sm:inline">Sender Inboxes</span>
+            <span className="sm:hidden">Inboxes</span>
+          </Button>
 
           {/* Slack Integration Button */}
           <Button
@@ -82,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSlackModal, onOpenComposeM
               />
               <div className="hidden md:block text-left">
                 <p className="text-xs font-semibold text-slate-200 leading-tight">{user.name}</p>
-                <p className="text-[11px] text-slate-400 leading-tight truncate max-w-[140px]">{user.email}</p>
+                <p className="text-[11px] text-slate-400 leading-tight truncate max-w-[130px]">{user.email}</p>
               </div>
               <button
                 onClick={logout}

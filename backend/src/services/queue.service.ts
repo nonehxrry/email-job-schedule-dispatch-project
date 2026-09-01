@@ -1,6 +1,6 @@
 import { Queue, QueueEvents } from 'bullmq';
 import { redisConnectionOptions } from '../config/redis.config';
-import { EmailJobData, ScheduleCampaignDTO } from '../types';
+import { EmailJobData } from '../types';
 import { prisma } from '../prisma/client';
 import { elasticsearchService } from './elasticsearch.service';
 import { env } from '../config/env.config';
@@ -39,9 +39,25 @@ export function initQueue(): Queue<EmailJobData> {
   return emailQueue;
 }
 
+export interface ExtendedScheduleCampaignDTO {
+  subject: string;
+  body: string;
+  subjectB?: string;
+  bodyB?: string;
+  isABTest?: boolean;
+  includeUnsubscribe?: boolean;
+  rotateSenders?: boolean;
+  senderEmail?: string;
+  senderName?: string;
+  leads: { email: string; name?: string }[];
+  startTime?: string;
+  delayBetweenEmailsSec?: number;
+  hourlyLimit?: number;
+}
+
 export class QueueService {
   /**
-   * Schedules a single email job with exact delay calculation
+   * Schedules a single email job with exact delay calculation & tracking injections
    */
   public async scheduleSingleJob(
     emailJobRecord: {
@@ -58,7 +74,8 @@ export class QueueService {
       scheduledAt: Date;
     },
     hourlyLimit: number,
-    delayBetweenEmailsMs: number
+    delayBetweenEmailsMs: number,
+    includeTracking = true
   ): Promise<string> {
     if (!emailQueue) {
       initQueue();
@@ -66,14 +83,29 @@ export class QueueService {
 
     const delayMs = Math.max(0, emailJobRecord.scheduledAt.getTime() - Date.now());
 
-    // Replace template variables {{name}}, {{email}} in subject & body
-    const formattedSubject = emailJobRecord.subject
+    // 1. Template Variables Replacement
+    let formattedSubject = emailJobRecord.subject
       .replace(/{{name}}/gi, emailJobRecord.recipientName || 'there')
       .replace(/{{email}}/gi, emailJobRecord.recipientEmail);
 
-    const formattedBody = emailJobRecord.body
+    let formattedBody = emailJobRecord.body
       .replace(/{{name}}/gi, emailJobRecord.recipientName || 'there')
       .replace(/{{email}}/gi, emailJobRecord.recipientEmail);
+
+    // 2. Real-World Tracking Injections (Open Pixel + Unsubscribe Link)
+    if (includeTracking) {
+      const openPixelUrl = `http://localhost:5000/api/track/open/${emailJobRecord.id}`;
+      const unsubscribeUrl = `http://localhost:5000/api/track/unsubscribe/${emailJobRecord.id}`;
+
+      formattedBody += `
+        <br/><br/>
+        <div style="font-size: 11px; color: #888; border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 20px; font-family: sans-serif;">
+          You received this email as part of ReachInbox outreach.
+          <a href="${unsubscribeUrl}" style="color: #6366f1; text-decoration: underline; margin-left: 4px;">Unsubscribe</a>
+        </div>
+        <img src="${openPixelUrl}" width="1" height="1" alt="" style="display:none !important;" />
+      `;
+    }
 
     const jobData: EmailJobData = {
       jobId: emailJobRecord.id,
@@ -110,31 +142,54 @@ export class QueueService {
   }
 
   /**
-   * Bulk schedules a batch campaign of leads with staggered intervals
+   * Bulk schedules a batch campaign of leads with sender rotation, A/B testing & suppression list
    */
-  public async scheduleBatchCampaign(userId: string, campaignData: ScheduleCampaignDTO) {
+  public async scheduleBatchCampaign(userId: string, campaignData: ExtendedScheduleCampaignDTO) {
     if (!emailQueue) {
       initQueue();
     }
 
-    const senderEmail = campaignData.senderEmail || env.DEFAULT_SENDER_EMAIL;
-    const senderName = campaignData.senderName || env.DEFAULT_SENDER_NAME;
+    const defaultSenderEmail = campaignData.senderEmail || env.DEFAULT_SENDER_EMAIL;
+    const defaultSenderName = campaignData.senderName || env.DEFAULT_SENDER_NAME;
     const delayBetweenSec = campaignData.delayBetweenEmailsSec ?? 2;
     const delayBetweenMs = delayBetweenSec * 1000;
     const hourlyLimit = campaignData.hourlyLimit ?? env.MAX_EMAILS_PER_HOUR_PER_SENDER;
 
-    // Parse start time (default to now if omitted or in the past)
+    // 1. Suppression List Check (Skip unsubscribed contacts)
+    const unsubscribed = await prisma.unsubscribedContact.findMany({
+      where: { userId },
+      select: { email: true },
+    });
+    const suppressedSet = new Set(unsubscribed.map((u) => u.email.toLowerCase().trim()));
+    const eligibleLeads = campaignData.leads.filter((l) => !suppressedSet.has(l.email.toLowerCase().trim()));
+
+    if (eligibleLeads.length === 0) {
+      throw new Error('All provided leads are in the suppression/unsubscribe list.');
+    }
+
+    // 2. Fetch Active Sender Accounts if Rotation Enabled
+    const senderAccounts = await prisma.emailAccount.findMany({
+      where: { userId, isActive: true },
+    });
+    const hasMultipleSenders = campaignData.rotateSenders && senderAccounts.length > 0;
+
+    // 3. Parse start time
     const baseStartTime = campaignData.startTime ? new Date(campaignData.startTime) : new Date();
     const effectiveStartTime = baseStartTime.getTime() < Date.now() ? new Date() : baseStartTime;
 
-    // 1. Create Campaign in Database
+    // 4. Create Campaign in Database
     const campaign = await prisma.campaign.create({
       data: {
         userId,
         name: campaignData.subject.slice(0, 50) || 'Untitled Campaign',
         subject: campaignData.subject,
         body: campaignData.body,
-        totalLeads: campaignData.leads.length,
+        subjectB: campaignData.subjectB || null,
+        bodyB: campaignData.bodyB || null,
+        isABTest: Boolean(campaignData.isABTest && campaignData.subjectB),
+        includeUnsubscribe: campaignData.includeUnsubscribe !== false,
+        rotateSenders: Boolean(campaignData.rotateSenders),
+        totalLeads: eligibleLeads.length,
         delayBetweenEmailsSec: delayBetweenSec,
         hourlyLimit,
         startTime: effectiveStartTime,
@@ -142,40 +197,57 @@ export class QueueService {
       },
     });
 
-    // 2. Prepare EmailJob records with staggered scheduledAt timestamps
-    const emailJobDataList = campaignData.leads.map((lead, index) => {
+    // 5. Prepare EmailJob records with staggered timestamps, A/B variants, and sender rotation
+    const emailJobDataList = eligibleLeads.map((lead, index) => {
       const scheduledTimestamp = effectiveStartTime.getTime() + index * delayBetweenMs;
       const scheduledAt = new Date(scheduledTimestamp);
+
+      // A/B Variant Assignment (50/50 split)
+      const isVariantB = campaignData.isABTest && campaignData.subjectB && index % 2 === 1;
+      const variant = campaignData.isABTest ? (isVariantB ? 'B' : 'A') : null;
+      const chosenSubject = isVariantB && campaignData.subjectB ? campaignData.subjectB : campaignData.subject;
+      const chosenBody = isVariantB && campaignData.bodyB ? campaignData.bodyB : campaignData.body;
+
+      // Sender Rotation (Round-Robin)
+      const assignedSender = hasMultipleSenders
+        ? senderAccounts[index % senderAccounts.length]
+        : null;
+      const senderEmail = assignedSender ? assignedSender.emailAddress : defaultSenderEmail;
+      const senderName = assignedSender ? assignedSender.senderName : defaultSenderName;
+      const senderId = assignedSender ? assignedSender.id : null;
 
       return {
         campaignId: campaign.id,
         userId,
+        senderId,
         senderEmail,
         recipientEmail: lead.email.toLowerCase().trim(),
         recipientName: lead.name || null,
-        subject: campaignData.subject,
-        body: campaignData.body,
+        subject: chosenSubject,
+        body: chosenBody,
+        variant,
         scheduledAt,
         status: 'SCHEDULED',
       };
     });
 
-    // 3. Batch insert into Database
+    // 6. Batch insert into Database
     const createdJobs = await prisma.$transaction(
       emailJobDataList.map((job) => prisma.emailJob.create({ data: job }))
     );
 
-    // 4. Enqueue BullMQ delayed jobs and index into Elasticsearch
+    // 7. Enqueue BullMQ delayed jobs and index into Elasticsearch
     for (let i = 0; i < createdJobs.length; i++) {
       const dbJob = createdJobs[i];
 
       await this.scheduleSingleJob(
         {
           ...dbJob,
-          senderName,
+          senderName: defaultSenderName,
         },
         hourlyLimit,
-        delayBetweenMs
+        delayBetweenMs,
+        campaignData.includeUnsubscribe !== false
       );
 
       // Index in Elasticsearch
@@ -185,8 +257,11 @@ export class QueueService {
     return {
       campaignId: campaign.id,
       totalScheduled: createdJobs.length,
+      suppressedCount: campaignData.leads.length - eligibleLeads.length,
       startTime: effectiveStartTime,
       staggerDelaySeconds: delayBetweenSec,
+      isABTest: campaign.isABTest,
+      rotateSenders: campaign.rotateSenders,
     };
   }
 

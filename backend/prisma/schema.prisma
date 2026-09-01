@@ -8,21 +8,22 @@ generator client {
 }
 
 model User {
-  id               String         @id @default(uuid())
-  email            String         @unique
-  name             String
-  avatarUrl        String?
-  googleId         String?        @unique
-  slackAccessToken String?
-  slackWebhookUrl  String?
-  slackChannel     String?
-  slackTeamName    String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id                   String                @id @default(uuid())
+  email                String                @unique
+  name                 String
+  avatarUrl            String?
+  googleId             String?               @unique
+  slackAccessToken     String?
+  slackWebhookUrl      String?
+  slackChannel         String?
+  slackTeamName        String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
-  emailAccounts    EmailAccount[]
-  campaigns        Campaign[]
-  emailJobs        EmailJob[]
+  emailAccounts        EmailAccount[]
+  campaigns            Campaign[]
+  emailJobs            EmailJob[]
+  unsubscribedContacts UnsubscribedContact[]
 
   @@map("users")
 }
@@ -38,6 +39,7 @@ model EmailAccount {
   smtpUser     String?
   smtpPass     String?
   isDefault    Boolean    @default(false)
+  isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -49,21 +51,27 @@ model EmailAccount {
 }
 
 model Campaign {
-  id                   String     @id @default(uuid())
-  userId               String
-  name                 String
-  subject              String
-  body                 String
-  totalLeads           Int        @default(0)
-  delayBetweenEmailsSec Int       @default(2)
-  hourlyLimit          Int        @default(50)
-  startTime            DateTime   @default(now())
-  status               String     @default("SCHEDULED") // SCHEDULED, PROCESSING, COMPLETED, PAUSED
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  id                    String     @id @default(uuid())
+  userId                String
+  name                  String
+  subject               String
+  body                  String
+  subjectB              String?
+  bodyB                 String?
+  isABTest              Boolean    @default(false)
+  isWarmupEnabled       Boolean    @default(false)
+  includeUnsubscribe    Boolean    @default(true)
+  rotateSenders         Boolean    @default(false)
+  totalLeads            Int        @default(0)
+  delayBetweenEmailsSec Int        @default(2)
+  hourlyLimit           Int        @default(50)
+  startTime             DateTime   @default(now())
+  status                String     @default("SCHEDULED") // SCHEDULED, PROCESSING, COMPLETED, PAUSED
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 
-  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  emailJobs            EmailJob[]
+  user                  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailJobs             EmailJob[]
 
   @@map("campaigns")
 }
@@ -78,6 +86,7 @@ model EmailJob {
   recipientName      String?
   subject            String
   body               String
+  variant            String?       // 'A' or 'B'
   scheduledAt        DateTime
   sentAt             DateTime?
   status             String        @default("SCHEDULED") // SCHEDULED, SENDING, SENT, RESCHEDULED, FAILED
@@ -86,6 +95,14 @@ model EmailJob {
   errorMessage       String?
   retryCount         Int           @default(0)
   rescheduledCount   Int           @default(0)
+
+  // Real-World Analytics & Engagement Tracking
+  openedAt           DateTime?
+  openCount          Int           @default(0)
+  clickedAt          DateTime?
+  clickCount         Int           @default(0)
+  unsubscribedAt     DateTime?
+
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
@@ -97,5 +114,18 @@ model EmailJob {
   @@index([scheduledAt])
   @@index([senderEmail])
   @@index([userId])
+  @@index([recipientEmail])
   @@map("email_jobs")
+}
+
+model UnsubscribedContact {
+  id             String   @id @default(uuid())
+  userId         String
+  email          String
+  unsubscribedAt DateTime @default(now())
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, email])
+  @@map("unsubscribed_contacts")
 }

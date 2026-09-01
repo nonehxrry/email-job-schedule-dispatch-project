@@ -4,7 +4,7 @@ import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { emailService } from '../services/email.service';
 import { format } from 'date-fns';
-import { Search, ExternalLink, MailCheck, User, RefreshCw, AlertCircle, Download, RotateCcw, Eye } from 'lucide-react';
+import { Search, ExternalLink, MailCheck, User, RefreshCw, AlertCircle, Download, RotateCcw, Eye, MousePointer } from 'lucide-react';
 
 interface SentEmailsTableProps {
   emails: EmailJob[];
@@ -98,7 +98,8 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
           <thead className="bg-slate-950/60 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
             <tr>
               <th scope="col" className="py-3.5 px-6 font-semibold">Recipient</th>
-              <th scope="col" className="py-3.5 px-6 font-semibold">Subject</th>
+              <th scope="col" className="py-3.5 px-6 font-semibold">Subject & Variant</th>
+              <th scope="col" className="py-3.5 px-6 font-semibold">Engagement</th>
               <th scope="col" className="py-3.5 px-6 font-semibold">Delivered At</th>
               <th scope="col" className="py-3.5 px-6 font-semibold">Status</th>
               <th scope="col" className="py-3.5 px-6 font-semibold text-right">Ethereal Inbox & Actions</th>
@@ -111,6 +112,7 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
                 <tr key={i} className="animate-pulse">
                   <td className="py-4 px-6"><div className="h-4 bg-slate-800 rounded w-44" /></td>
                   <td className="py-4 px-6"><div className="h-4 bg-slate-800 rounded w-60" /></td>
+                  <td className="py-4 px-6"><div className="h-4 bg-slate-800 rounded w-28" /></td>
                   <td className="py-4 px-6"><div className="h-4 bg-slate-800 rounded w-32" /></td>
                   <td className="py-4 px-6"><div className="h-6 bg-slate-800 rounded-full w-20" /></td>
                   <td className="py-4 px-6 text-right"><div className="h-8 bg-slate-800 rounded-lg w-28 ml-auto" /></td>
@@ -119,7 +121,7 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
             ) : emails.length === 0 ? (
               // Empty State
               <tr>
-                <td colSpan={5} className="py-16 text-center">
+                <td colSpan={6} className="py-16 text-center">
                   <div className="max-w-sm mx-auto flex flex-col items-center">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
                       <MailCheck className="w-6 h-6 text-emerald-400" />
@@ -157,10 +159,41 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
                       </div>
                     </td>
 
-                    {/* Subject */}
+                    {/* Subject & Variant */}
                     <td className="py-4 px-6 max-w-xs truncate">
-                      <p className="font-medium text-slate-200 truncate">{job.subject}</p>
+                      <div className="flex items-center gap-1.5">
+                        {job.variant && (
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                            Var {job.variant}
+                          </span>
+                        )}
+                        <p className="font-medium text-slate-200 truncate">{job.subject}</p>
+                      </div>
                       <p className="text-xs text-slate-400 truncate mt-0.5">{job.body.replace(/<[^>]*>?/gm, '')}</p>
+                    </td>
+
+                    {/* Real-World Engagement Metrics */}
+                    <td className="py-4 px-6 whitespace-nowrap text-xs">
+                      <div className="flex items-center gap-2">
+                        {job.openCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                            <Eye className="w-3 h-3" />
+                            Opened ({job.openCount}x)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                            <Eye className="w-3 h-3 text-slate-600" />
+                            Unopened
+                          </span>
+                        )}
+
+                        {job.clickCount > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                            <MousePointer className="w-3 h-3" />
+                            Clicked
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Sent Date */}
