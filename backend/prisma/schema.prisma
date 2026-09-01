@@ -1,0 +1,101 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  name             String
+  avatarUrl        String?
+  googleId         String?        @unique
+  slackAccessToken String?
+  slackWebhookUrl  String?
+  slackChannel     String?
+  slackTeamName    String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  emailAccounts    EmailAccount[]
+  campaigns        Campaign[]
+  emailJobs        EmailJob[]
+
+  @@map("users")
+}
+
+model EmailAccount {
+  id           String     @id @default(uuid())
+  userId       String
+  emailAddress String
+  senderName   String
+  hourlyLimit  Int        @default(50)
+  smtpHost     String?
+  smtpPort     Int?
+  smtpUser     String?
+  smtpPass     String?
+  isDefault    Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailJobs    EmailJob[]
+
+  @@unique([userId, emailAddress])
+  @@map("email_accounts")
+}
+
+model Campaign {
+  id                   String     @id @default(uuid())
+  userId               String
+  name                 String
+  subject              String
+  body                 String
+  totalLeads           Int        @default(0)
+  delayBetweenEmailsSec Int       @default(2)
+  hourlyLimit          Int        @default(50)
+  startTime            DateTime   @default(now())
+  status               String     @default("SCHEDULED") // SCHEDULED, PROCESSING, COMPLETED, PAUSED
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailJobs            EmailJob[]
+
+  @@map("campaigns")
+}
+
+model EmailJob {
+  id                 String        @id @default(uuid())
+  campaignId         String?
+  userId             String
+  senderId           String?
+  senderEmail        String
+  recipientEmail     String
+  recipientName      String?
+  subject            String
+  body               String
+  scheduledAt        DateTime
+  sentAt             DateTime?
+  status             String        @default("SCHEDULED") // SCHEDULED, SENDING, SENT, RESCHEDULED, FAILED
+  bullmqJobId        String?
+  etherealPreviewUrl String?
+  errorMessage       String?
+  retryCount         Int           @default(0)
+  rescheduledCount   Int           @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  campaign           Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender             EmailAccount? @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([senderEmail])
+  @@index([userId])
+  @@map("email_jobs")
+}

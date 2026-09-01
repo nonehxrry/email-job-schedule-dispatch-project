@@ -1,0 +1,168 @@
+import React from 'react';
+import { EmailJob } from '../types';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { format } from 'date-fns';
+import { Search, ExternalLink, MailCheck, User, RefreshCw, AlertCircle } from 'lucide-react';
+
+interface SentEmailsTableProps {
+  emails: EmailJob[];
+  isLoading: boolean;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  onRefresh: () => void;
+  totalCount: number;
+}
+
+export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
+  emails,
+  isLoading,
+  searchQuery,
+  onSearchChange,
+  onRefresh,
+  totalCount,
+}) => {
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+      {/* Table Header Controls */}
+      <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search sent emails via Elasticsearch..."
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="md"
+            onClick={onRefresh}
+            isLoading={isLoading}
+            title="Refresh List"
+            className="p-2"
+          >
+            <RefreshCw className={`w-4 h-4 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-slate-400 w-full sm:w-auto justify-end">
+          <span>
+            Showing <strong className="text-slate-200">{emails.length}</strong> of{' '}
+            <strong className="text-slate-200">{totalCount}</strong> delivered emails
+          </span>
+        </div>
+      </div>
+
+      {/* Table Content */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-300">
+          <thead className="bg-slate-950/60 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
+            <tr>
+              <th scope="col" className="py-3.5 px-6 font-semibold">Recipient</th>
+              <th scope="col" className="py-3.5 px-6 font-semibold">Subject</th>
+              <th scope="col" className="py-3.5 px-6 font-semibold">Delivered At</th>
+              <th scope="col" className="py-3.5 px-6 font-semibold">Status</th>
+              <th scope="col" className="py-3.5 px-6 font-semibold text-right">Ethereal Inbox</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/60">
+            {isLoading ? (
+              // Skeletons
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} className="animate-pulse">
+                  <td className="py-4 px-6"><div className="h-4 bg-slate-800 rounded w-44" /></td>
+                  <td className="py-4 px-6"><div className="h-4 bg-slate-800 rounded w-60" /></td>
+                  <td className="py-4 px-6"><div className="h-4 bg-slate-800 rounded w-32" /></td>
+                  <td className="py-4 px-6"><div className="h-6 bg-slate-800 rounded-full w-20" /></td>
+                  <td className="py-4 px-6 text-right"><div className="h-8 bg-slate-800 rounded-lg w-28 ml-auto" /></td>
+                </tr>
+              ))
+            ) : emails.length === 0 ? (
+              // Empty State
+              <tr>
+                <td colSpan={5} className="py-16 text-center">
+                  <div className="max-w-sm mx-auto flex flex-col items-center">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
+                      <MailCheck className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <h4 className="text-base font-semibold text-slate-200">No sent emails yet</h4>
+                    <p className="text-xs text-slate-400 mt-1 mb-2 text-center">
+                      {searchQuery
+                        ? 'No sent emails match your query.'
+                        : 'Emails dispatched by the BullMQ worker will appear here with instant Ethereal preview links.'}
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              emails.map((job) => {
+                const sentDate = job.sentAt ? new Date(job.sentAt) : new Date(job.scheduledAt);
+                return (
+                  <tr key={job.id} className="hover:bg-slate-800/40 transition-colors">
+                    {/* Recipient */}
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                          <User className="w-4 h-4" />
+                        </div>
+                        <div>
+                          {job.recipientName && (
+                            <p className="font-medium text-slate-200 leading-tight">{job.recipientName}</p>
+                          )}
+                          <p className="text-xs text-slate-400 leading-tight font-mono">{job.recipientEmail}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Subject */}
+                    <td className="py-4 px-6 max-w-xs truncate">
+                      <p className="font-medium text-slate-200 truncate">{job.subject}</p>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{job.body.replace(/<[^>]*>?/gm, '')}</p>
+                    </td>
+
+                    {/* Sent Date */}
+                    <td className="py-4 px-6 whitespace-nowrap text-xs">
+                      <p className="font-medium text-slate-200">{format(sentDate, 'MMM d, yyyy · h:mm:ss a')}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">via {job.senderEmail}</p>
+                    </td>
+
+                    {/* Status */}
+                    <td className="py-4 px-6 whitespace-nowrap">
+                      <Badge status={job.status} />
+                    </td>
+
+                    {/* Ethereal Link Action */}
+                    <td className="py-4 px-6 text-right whitespace-nowrap">
+                      {job.etherealPreviewUrl ? (
+                        <a
+                          href={job.etherealPreviewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 transition-all hover:shadow-lg hover:shadow-indigo-500/10"
+                        >
+                          <span>View Email</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      ) : job.errorMessage ? (
+                        <span className="text-xs text-rose-400 flex items-center justify-end gap-1" title={job.errorMessage}>
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          Error: {job.errorMessage.slice(0, 25)}...
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-500 italic">Dispatched</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
