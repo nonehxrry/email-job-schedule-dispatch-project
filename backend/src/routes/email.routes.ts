@@ -8,5 +8,8 @@ router.get('/scheduled', requireAuth, (req, res) => emailController.getScheduled
 router.get('/sent', requireAuth, (req, res) => emailController.getSentEmails(req, res));
 router.get('/search', requireAuth, (req, res) => emailController.searchEmails(req, res));
 router.get('/stats', requireAuth, (req, res) => emailController.getStats(req, res));
+router.get('/export', requireAuth, (req, res) => emailController.exportCsv(req, res));
+router.post('/retry-failed', requireAuth, (req, res) => emailController.retryFailed(req, res));
+router.delete('/:id', requireAuth, (req, res) => emailController.deleteJob(req, res));
 
 export default router;

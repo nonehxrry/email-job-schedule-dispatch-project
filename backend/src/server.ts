@@ -6,7 +6,7 @@ import { ExpressAdapter } from '@bull-board/express';
 
 import { env } from './config/env.config';
 import routes from './routes';
-import { emailQueue } from './services/queue.service';
+import { initQueue, emailQueue, queueService } from './services/queue.service';
 import { emailWorkerService } from './services/email.worker';
 import { initSmtpTransporter } from './config/smtp.config';
 import { initElasticsearch } from './config/elasticsearch.config';
@@ -26,23 +26,6 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// BullMQ Live Dashboard Setup (Bull-Board)
-const serverAdapter = new ExpressAdapter();
-serverAdapter.setBasePath('/admin/queues');
-
-createBullBoard({
-  queues: [new BullMQAdapter(emailQueue)],
-  serverAdapter,
-});
-
-app.use('/admin/queues', serverAdapter.getRouter());
-
-// API Routes
-app.use('/api', routes);
-
-// Global Error Handler
-app.use(errorHandler);
-
 // Server Startup
 async function startServer() {
   try {
@@ -50,19 +33,40 @@ async function startServer() {
     console.log('🚀 ReachInbox Full-Stack Email Job Scheduler is Booting Up...');
     console.log('------------------------------------------------------------');
 
-    // 1. Initialize Redis (External or Embedded)
+    // 1. Initialize Redis Engine (Real Redis Server on port 6379)
     await initRedis();
 
-    // 2. Initialize SMTP (Ethereal Email)
+    // 2. Initialize BullMQ Queue
+    const queue = initQueue();
+
+    // 3. Mount Bull-Board Live Queue Monitor
+    const serverAdapter = new ExpressAdapter();
+    serverAdapter.setBasePath('/admin/queues');
+    createBullBoard({
+      queues: [new BullMQAdapter(queue)],
+      serverAdapter,
+    });
+    app.use('/admin/queues', serverAdapter.getRouter());
+
+    // 4. Mount Master API Routes
+    app.use('/api', routes);
+
+    // 5. Global Error Handler
+    app.use(errorHandler);
+
+    // 6. Initialize SMTP Transporter
     await initSmtpTransporter();
 
-    // 3. Initialize Elasticsearch (with fallback)
+    // 7. Initialize Elasticsearch Indexing
     await initElasticsearch();
 
-    // 4. Start BullMQ Email Worker
+    // 8. Start BullMQ Email Worker
     emailWorkerService.initWorker();
 
-    // 5. Start HTTP Server
+    // 9. Recover Any Pending / Scheduled Jobs from Previous Run (Crash Resilience)
+    await queueService.recoverPendingJobsOnBoot();
+
+    // 10. Start HTTP Server
     const server = app.listen(env.PORT, () => {
       console.log('============================================================');
       console.log(`✅ Backend API Server running at:     http://localhost:${env.PORT}`);
@@ -79,7 +83,7 @@ async function startServer() {
       console.log(`\n[Shutdown] Received ${signal}. Gracefully stopping workers and connections...`);
       server.close();
       await emailWorkerService.close();
-      await emailQueue.close();
+      if (emailQueue) await emailQueue.close();
       await closeRedis();
       await prisma.$disconnect();
       console.log('[Shutdown] All background services terminated cleanly. Exiting.');

@@ -5,6 +5,7 @@ import { ScheduledEmailsTable } from '../components/ScheduledEmailsTable';
 import { SentEmailsTable } from '../components/SentEmailsTable';
 import { ComposeModal } from '../components/ComposeModal';
 import { SlackIntegrationModal } from '../components/SlackIntegrationModal';
+import { EmailDetailModal } from '../components/EmailDetailModal';
 import { emailService } from '../services/email.service';
 import { EmailJob, EmailStats } from '../types';
 import { Clock, CheckCircle2 } from 'lucide-react';
@@ -15,6 +16,7 @@ export const DashboardPage: React.FC = () => {
   // Modals
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isSlackOpen, setIsSlackOpen] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState<EmailJob | null>(null);
 
   // Data States
   const [stats, setStats] = useState<EmailStats>({
@@ -74,12 +76,12 @@ export const DashboardPage: React.FC = () => {
     fetchEmails();
   }, [fetchStats, fetchEmails]);
 
-  // Polling interval every 4 seconds to catch real-time BullMQ background completions
+  // Polling interval every 3 seconds for instant UI updates on queue dispatch
   useEffect(() => {
     const interval = setInterval(() => {
       fetchStats();
       fetchEmails();
-    }, 4000);
+    }, 3000);
     return () => clearInterval(interval);
   }, [fetchStats, fetchEmails]);
 
@@ -157,6 +159,7 @@ export const DashboardPage: React.FC = () => {
               fetchEmails();
             }}
             onComposeClick={() => setIsComposeOpen(true)}
+            onSelectEmail={(email) => setSelectedEmail(email)}
             totalCount={scheduledTotal}
           />
         ) : (
@@ -169,6 +172,7 @@ export const DashboardPage: React.FC = () => {
               fetchStats();
               fetchEmails();
             }}
+            onSelectEmail={(email) => setSelectedEmail(email)}
             totalCount={sentTotal}
           />
         )}
@@ -187,6 +191,12 @@ export const DashboardPage: React.FC = () => {
       <SlackIntegrationModal
         isOpen={isSlackOpen}
         onClose={() => setIsSlackOpen(false)}
+      />
+
+      <EmailDetailModal
+        email={selectedEmail}
+        isOpen={Boolean(selectedEmail)}
+        onClose={() => setSelectedEmail(null)}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { Queue, QueueEvents } from 'bullmq';
-import { redisClient, redisConnectionOptions } from '../config/redis.config';
+import { redisConnectionOptions } from '../config/redis.config';
 import { EmailJobData, ScheduleCampaignDTO } from '../types';
 import { prisma } from '../prisma/client';
 import { elasticsearchService } from './elasticsearch.service';
@@ -7,42 +7,36 @@ import { env } from '../config/env.config';
 
 export const QUEUE_NAME = 'email-dispatch-queue';
 
-let emailQueueInstance: Queue<EmailJobData> | null = null;
-let emailQueueEventsInstance: QueueEvents | null = null;
+export let emailQueue: Queue<EmailJobData>;
+export let emailQueueEvents: QueueEvents;
 
-export function getEmailQueue(): Queue<EmailJobData> {
-  if (!emailQueueInstance) {
-    emailQueueInstance = new Queue<EmailJobData>(QUEUE_NAME, {
-      connection: redisClient as any,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 5000,
-        },
-        removeOnComplete: false,
-        removeOnFail: false,
+export function initQueue(): Queue<EmailJobData> {
+  emailQueue = new Queue<EmailJobData>(QUEUE_NAME, {
+    connection: redisConnectionOptions,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000,
       },
-    });
-  }
-  return emailQueueInstance;
-}
+      removeOnComplete: false,
+      removeOnFail: false,
+    },
+  });
 
-export function initQueueEvents(): QueueEvents {
-  if (!emailQueueEventsInstance) {
-    emailQueueEventsInstance = new QueueEvents(QUEUE_NAME, {
-      connection: redisClient as any,
-    });
+  emailQueueEvents = new QueueEvents(QUEUE_NAME, {
+    connection: redisConnectionOptions,
+  });
 
-    emailQueueEventsInstance.on('completed', ({ jobId }) => {
-      console.log(`[BullMQ] Job ${jobId} finished execution`);
-    });
+  emailQueueEvents.on('completed', ({ jobId }) => {
+    console.log(`[BullMQ] Job ${jobId} finished execution`);
+  });
 
-    emailQueueEventsInstance.on('failed', ({ jobId, failedReason }) => {
-      console.error(`[BullMQ] Job ${jobId} failed: ${failedReason}`);
-    });
-  }
-  return emailQueueEventsInstance;
+  emailQueueEvents.on('failed', ({ jobId, failedReason }) => {
+    console.error(`[BullMQ] Job ${jobId} failed: ${failedReason}`);
+  });
+
+  return emailQueue;
 }
 
 export class QueueService {
@@ -66,8 +60,20 @@ export class QueueService {
     hourlyLimit: number,
     delayBetweenEmailsMs: number
   ): Promise<string> {
-    const queue = getEmailQueue();
+    if (!emailQueue) {
+      initQueue();
+    }
+
     const delayMs = Math.max(0, emailJobRecord.scheduledAt.getTime() - Date.now());
+
+    // Replace template variables {{name}}, {{email}} in subject & body
+    const formattedSubject = emailJobRecord.subject
+      .replace(/{{name}}/gi, emailJobRecord.recipientName || 'there')
+      .replace(/{{email}}/gi, emailJobRecord.recipientEmail);
+
+    const formattedBody = emailJobRecord.body
+      .replace(/{{name}}/gi, emailJobRecord.recipientName || 'there')
+      .replace(/{{email}}/gi, emailJobRecord.recipientEmail);
 
     const jobData: EmailJobData = {
       jobId: emailJobRecord.id,
@@ -78,14 +84,14 @@ export class QueueService {
       senderName: emailJobRecord.senderName || env.DEFAULT_SENDER_NAME,
       recipientEmail: emailJobRecord.recipientEmail,
       recipientName: emailJobRecord.recipientName || undefined,
-      subject: emailJobRecord.subject,
-      body: emailJobRecord.body,
+      subject: formattedSubject,
+      body: formattedBody,
       scheduledAt: emailJobRecord.scheduledAt.toISOString(),
       hourlyLimit,
       delayBetweenEmailsMs,
     };
 
-    const job = await queue.add(`send-${emailJobRecord.id}`, jobData, {
+    const job = await emailQueue.add(`send-${emailJobRecord.id}`, jobData, {
       jobId: emailJobRecord.id, // Idempotency
       delay: delayMs,
     });
@@ -96,7 +102,9 @@ export class QueueService {
       data: { bullmqJobId: job.id },
     });
 
-    console.log(`[BullMQ] Enqueued delayed job ${emailJobRecord.id} with delay ${delayMs}ms (fires at ${emailJobRecord.scheduledAt.toISOString()})`);
+    console.log(
+      `[BullMQ] Enqueued delayed job ${emailJobRecord.id} with delay ${delayMs}ms (fires at ${emailJobRecord.scheduledAt.toISOString()})`
+    );
 
     return job.id!;
   }
@@ -104,21 +112,22 @@ export class QueueService {
   /**
    * Bulk schedules a batch campaign of leads with staggered intervals
    */
-  public async scheduleBatchCampaign(
-    userId: string,
-    campaignData: ScheduleCampaignDTO
-  ) {
+  public async scheduleBatchCampaign(userId: string, campaignData: ScheduleCampaignDTO) {
+    if (!emailQueue) {
+      initQueue();
+    }
+
     const senderEmail = campaignData.senderEmail || env.DEFAULT_SENDER_EMAIL;
     const senderName = campaignData.senderName || env.DEFAULT_SENDER_NAME;
     const delayBetweenSec = campaignData.delayBetweenEmailsSec ?? 2;
     const delayBetweenMs = delayBetweenSec * 1000;
     const hourlyLimit = campaignData.hourlyLimit ?? env.MAX_EMAILS_PER_HOUR_PER_SENDER;
 
-    // Parse start time (default to now if omitted or past)
+    // Parse start time (default to now if omitted or in the past)
     const baseStartTime = campaignData.startTime ? new Date(campaignData.startTime) : new Date();
     const effectiveStartTime = baseStartTime.getTime() < Date.now() ? new Date() : baseStartTime;
 
-    // 1. Create Campaign in PostgreSQL / SQLite
+    // 1. Create Campaign in Database
     const campaign = await prisma.campaign.create({
       data: {
         userId,
@@ -180,7 +189,68 @@ export class QueueService {
       staggerDelaySeconds: delayBetweenSec,
     };
   }
+
+  /**
+   * Resumes and recovers pending jobs on system boot / restart
+   */
+  public async recoverPendingJobsOnBoot(): Promise<number> {
+    const pendingJobs = await prisma.emailJob.findMany({
+      where: {
+        status: { in: ['SCHEDULED', 'RESCHEDULED'] },
+      },
+    });
+
+    if (pendingJobs.length === 0) return 0;
+
+    console.log(`[BullMQ Recovery] Found ${pendingJobs.length} pending jobs from previous session. Re-verifying queues...`);
+
+    let recoveredCount = 0;
+    for (const job of pendingJobs) {
+      try {
+        await this.scheduleSingleJob(
+          {
+            ...job,
+            senderName: env.DEFAULT_SENDER_NAME,
+          },
+          env.MAX_EMAILS_PER_HOUR_PER_SENDER,
+          env.EMAIL_SEND_DELAY_MS
+        );
+        recoveredCount++;
+      } catch (e: any) {
+        console.warn(`[BullMQ Recovery] Could not re-enqueue job ${job.id}: ${e.message}`);
+      }
+    }
+
+    console.log(`[BullMQ Recovery] Successfully verified ${recoveredCount} jobs for execution.`);
+    return recoveredCount;
+  }
+
+  /**
+   * Retries all failed jobs for a user
+   */
+  public async retryFailedJobs(userId: string): Promise<number> {
+    const failedJobs = await prisma.emailJob.findMany({
+      where: { userId, status: 'FAILED' },
+    });
+
+    for (const job of failedJobs) {
+      const updated = await prisma.emailJob.update({
+        where: { id: job.id },
+        data: { status: 'SCHEDULED', scheduledAt: new Date() },
+      });
+
+      await this.scheduleSingleJob(
+        {
+          ...updated,
+          senderName: env.DEFAULT_SENDER_NAME,
+        },
+        env.MAX_EMAILS_PER_HOUR_PER_SENDER,
+        env.EMAIL_SEND_DELAY_MS
+      );
+    }
+
+    return failedJobs.length;
+  }
 }
 
 export const queueService = new QueueService();
-export const emailQueue = getEmailQueue();

@@ -2,8 +2,9 @@ import React from 'react';
 import { EmailJob } from '../types';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
+import { emailService } from '../services/email.service';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Search, Calendar, User, Mail, Plus, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Search, Calendar, User, Mail, Plus, RefreshCw, AlertTriangle, Download, Trash2, Eye } from 'lucide-react';
 
 interface ScheduledEmailsTableProps {
   emails: EmailJob[];
@@ -12,6 +13,7 @@ interface ScheduledEmailsTableProps {
   onSearchChange: (q: string) => void;
   onRefresh: () => void;
   onComposeClick: () => void;
+  onSelectEmail: (email: EmailJob) => void;
   totalCount: number;
 }
 
@@ -22,8 +24,20 @@ export const ScheduledEmailsTable: React.FC<ScheduledEmailsTableProps> = ({
   onSearchChange,
   onRefresh,
   onComposeClick,
+  onSelectEmail,
   totalCount,
 }) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm('Cancel and delete this scheduled email job?')) return;
+    try {
+      await emailService.deleteJob(id);
+      onRefresh();
+    } catch (err: any) {
+      alert('Failed to delete job');
+    }
+  };
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
       {/* Table Header Controls */}
@@ -49,6 +63,15 @@ export const ScheduledEmailsTable: React.FC<ScheduledEmailsTableProps> = ({
           >
             <RefreshCw className={`w-4 h-4 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => emailService.downloadCsvExport('SCHEDULED')}
+            title="Export Scheduled Emails as CSV"
+            leftIcon={<Download className="w-4 h-4 text-slate-400" />}
+          >
+            Export CSV
+          </Button>
         </div>
 
         <div className="flex items-center gap-2 text-xs text-slate-400 w-full sm:w-auto justify-end">
@@ -68,7 +91,7 @@ export const ScheduledEmailsTable: React.FC<ScheduledEmailsTableProps> = ({
               <th scope="col" className="py-3.5 px-6 font-semibold">Subject</th>
               <th scope="col" className="py-3.5 px-6 font-semibold">Scheduled For</th>
               <th scope="col" className="py-3.5 px-6 font-semibold">Sender Account</th>
-              <th scope="col" className="py-3.5 px-6 font-semibold text-right">Status</th>
+              <th scope="col" className="py-3.5 px-6 font-semibold text-right">Status & Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -108,11 +131,15 @@ export const ScheduledEmailsTable: React.FC<ScheduledEmailsTableProps> = ({
                 const schedDate = new Date(job.scheduledAt);
                 const isPast = schedDate.getTime() < Date.now();
                 return (
-                  <tr key={job.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr
+                    key={job.id}
+                    onClick={() => onSelectEmail(job)}
+                    className="hover:bg-slate-800/50 transition-colors cursor-pointer group"
+                  >
                     {/* Recipient */}
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-slate-800 group-hover:bg-indigo-600/20 group-hover:text-indigo-400 flex items-center justify-center text-slate-400 shrink-0 transition-colors">
                           <User className="w-4 h-4" />
                         </div>
                         <div>
@@ -148,16 +175,35 @@ export const ScheduledEmailsTable: React.FC<ScheduledEmailsTableProps> = ({
                       </div>
                     </td>
 
-                    {/* Status */}
+                    {/* Status & Actions */}
                     <td className="py-4 px-6 text-right whitespace-nowrap">
-                      <div className="inline-flex flex-col items-end gap-1">
-                        <Badge status={job.status} />
-                        {job.rescheduledCount > 0 && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400">
-                            <AlertTriangle className="w-3 h-3" />
-                            Deferred ({job.rescheduledCount}x)
-                          </span>
-                        )}
+                      <div className="inline-flex items-center gap-2 justify-end">
+                        <div className="inline-flex flex-col items-end gap-1">
+                          <Badge status={job.status} />
+                          {job.rescheduledCount > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400">
+                              <AlertTriangle className="w-3 h-3" />
+                              Deferred ({job.rescheduledCount}x)
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectEmail(job);
+                          }}
+                          className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                          title="Inspect Email"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDelete(e, job.id)}
+                          className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                          title="Cancel Job"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>

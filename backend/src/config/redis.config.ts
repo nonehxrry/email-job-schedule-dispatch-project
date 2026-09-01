@@ -1,46 +1,66 @@
 import Redis, { RedisOptions } from 'ioredis';
-import RedisMock from 'ioredis-mock';
+import { RedisMemoryServer } from 'redis-memory-server';
 import { env } from './env.config';
 
-export let isMockRedis = false;
+let memoryRedisServer: RedisMemoryServer | null = null;
 
-export const redisConnectionOptions: RedisOptions = {
+export let redisConnectionOptions: RedisOptions = {
   host: env.REDIS_HOST,
   port: env.REDIS_PORT,
   password: env.REDIS_PASSWORD || undefined,
-  maxRetriesPerRequest: null, // Required for BullMQ
+  maxRetriesPerRequest: null,
   enableReadyCheck: false,
   lazyConnect: true,
   retryStrategy(times) {
-    if (times > 3) return null; // stop reconnecting after 3 tries and switch to mock
-    return Math.min(times * 100, 1000);
+    return Math.min(times * 100, 2000);
   },
 };
 
-// Create client instance with lazyConnect to prevent immediate uncaught connection errors
 export let redisClient: Redis = new Redis(redisConnectionOptions);
 
-// Prevent unhandled node error crashes
-redisClient.on('error', (err) => {
-  // Silent warning for connection retries
-});
-
 export async function initRedis(): Promise<Redis> {
+  // 1. First test if external Redis is already running on port 6379
   try {
-    await redisClient.connect();
-    const pong = await redisClient.ping();
-    console.log(`[Redis] ✅ Connected to Redis server at ${env.REDIS_HOST}:${env.REDIS_PORT} (ping: ${pong})`);
-    isMockRedis = false;
+    const testClient = new Redis({
+      ...redisConnectionOptions,
+      connectTimeout: 1500,
+    });
+    testClient.on('error', () => {});
+    await testClient.connect();
+    await testClient.ping();
+    console.log(`[Redis] ✅ Connected to existing Redis server at ${env.REDIS_HOST}:${env.REDIS_PORT}`);
+    redisClient = testClient;
     return redisClient;
-  } catch (error: any) {
-    console.warn(`[Redis] ⚠️ Could not reach Redis on ${env.REDIS_HOST}:${env.REDIS_PORT}. Initializing resilient in-memory Redis engine...`);
-    
-    // Replace with in-memory mock client that supports BullMQ & Rate Limiter commands
-    const mockClient = new RedisMock();
-    redisClient = mockClient as unknown as Redis;
-    isMockRedis = true;
-    console.log(`[Redis] ✅ Resilient In-Memory Redis Engine active and ready for BullMQ.`);
-    return redisClient;
+  } catch (e) {
+    // 2. If not running, start the real embedded Redis server on port 6379
+    console.log(`[Redis] 🚀 Launching real embedded Redis server on port ${env.REDIS_PORT}...`);
+    try {
+      memoryRedisServer = new RedisMemoryServer({
+        instance: {
+          port: env.REDIS_PORT,
+        },
+      });
+
+      await memoryRedisServer.start();
+      const host = await memoryRedisServer.getHost();
+      const port = await memoryRedisServer.getPort();
+
+      redisConnectionOptions = {
+        host,
+        port,
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+      };
+
+      redisClient = new Redis(redisConnectionOptions);
+      redisClient.on('error', (err) => console.error('[Redis Error]:', err.message));
+      await redisClient.ping();
+      console.log(`[Redis] ✅ Real Redis engine running on ${host}:${port} (BullMQ & Lua scripts fully supported)`);
+      return redisClient;
+    } catch (embeddedErr: any) {
+      console.error(`[Redis] Failed to start embedded Redis: ${embeddedErr.message}`);
+      return redisClient;
+    }
   }
 }
 
@@ -48,6 +68,11 @@ export async function closeRedis(): Promise<void> {
   if (redisClient) {
     try {
       await redisClient.quit();
+    } catch {}
+  }
+  if (memoryRedisServer) {
+    try {
+      await memoryRedisServer.stop();
     } catch {}
   }
 }

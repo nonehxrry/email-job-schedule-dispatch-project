@@ -2,8 +2,9 @@ import React from 'react';
 import { EmailJob } from '../types';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
+import { emailService } from '../services/email.service';
 import { format } from 'date-fns';
-import { Search, ExternalLink, MailCheck, User, RefreshCw, AlertCircle } from 'lucide-react';
+import { Search, ExternalLink, MailCheck, User, RefreshCw, AlertCircle, Download, RotateCcw, Eye } from 'lucide-react';
 
 interface SentEmailsTableProps {
   emails: EmailJob[];
@@ -11,6 +12,7 @@ interface SentEmailsTableProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onRefresh: () => void;
+  onSelectEmail: (email: EmailJob) => void;
   totalCount: number;
 }
 
@@ -20,8 +22,21 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
   searchQuery,
   onSearchChange,
   onRefresh,
+  onSelectEmail,
   totalCount,
 }) => {
+  const handleRetryFailed = async () => {
+    try {
+      const res = await emailService.retryFailed();
+      alert(res.message);
+      onRefresh();
+    } catch {
+      alert('Failed to retry emails');
+    }
+  };
+
+  const hasFailed = emails.some((e) => e.status === 'FAILED');
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
       {/* Table Header Controls */}
@@ -47,6 +62,26 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
           >
             <RefreshCw className={`w-4 h-4 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => emailService.downloadCsvExport('SENT')}
+            title="Export Sent Emails as CSV"
+            leftIcon={<Download className="w-4 h-4 text-slate-400" />}
+          >
+            Export CSV
+          </Button>
+          {hasFailed && (
+            <Button
+              variant="danger"
+              size="md"
+              onClick={handleRetryFailed}
+              title="Retry All Failed Dispatches"
+              leftIcon={<RotateCcw className="w-4 h-4" />}
+            >
+              Retry Failed
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-xs text-slate-400 w-full sm:w-auto justify-end">
@@ -66,7 +101,7 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
               <th scope="col" className="py-3.5 px-6 font-semibold">Subject</th>
               <th scope="col" className="py-3.5 px-6 font-semibold">Delivered At</th>
               <th scope="col" className="py-3.5 px-6 font-semibold">Status</th>
-              <th scope="col" className="py-3.5 px-6 font-semibold text-right">Ethereal Inbox</th>
+              <th scope="col" className="py-3.5 px-6 font-semibold text-right">Ethereal Inbox & Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -102,11 +137,15 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
               emails.map((job) => {
                 const sentDate = job.sentAt ? new Date(job.sentAt) : new Date(job.scheduledAt);
                 return (
-                  <tr key={job.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr
+                    key={job.id}
+                    onClick={() => onSelectEmail(job)}
+                    className="hover:bg-slate-800/50 transition-colors cursor-pointer group"
+                  >
                     {/* Recipient */}
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-slate-800 group-hover:bg-emerald-600/20 group-hover:text-emerald-400 flex items-center justify-center text-slate-400 shrink-0 transition-colors">
                           <User className="w-4 h-4" />
                         </div>
                         <div>
@@ -135,26 +174,39 @@ export const SentEmailsTable: React.FC<SentEmailsTableProps> = ({
                       <Badge status={job.status} />
                     </td>
 
-                    {/* Ethereal Link Action */}
+                    {/* Ethereal Link & Actions */}
                     <td className="py-4 px-6 text-right whitespace-nowrap">
-                      {job.etherealPreviewUrl ? (
-                        <a
-                          href={job.etherealPreviewUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 transition-all hover:shadow-lg hover:shadow-indigo-500/10"
+                      <div className="inline-flex items-center gap-2 justify-end">
+                        {job.etherealPreviewUrl ? (
+                          <a
+                            href={job.etherealPreviewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 transition-all hover:shadow-lg hover:shadow-indigo-500/10"
+                          >
+                            <span>View Email</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        ) : job.errorMessage ? (
+                          <span className="text-xs text-rose-400 flex items-center justify-end gap-1" title={job.errorMessage}>
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Error: {job.errorMessage.slice(0, 20)}...
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-500 italic">Dispatched</span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectEmail(job);
+                          }}
+                          className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                          title="Inspect Email"
                         >
-                          <span>View Email</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      ) : job.errorMessage ? (
-                        <span className="text-xs text-rose-400 flex items-center justify-end gap-1" title={job.errorMessage}>
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          Error: {job.errorMessage.slice(0, 25)}...
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-500 italic">Dispatched</span>
-                      )}
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
