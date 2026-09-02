@@ -24,6 +24,16 @@ console.log('[Build] Running Prisma DB Push...');
 execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', env: process.env });
 
 console.log('[Build] Compiling TypeScript...');
-execSync('npx tsc', { stdio: 'inherit', env: process.env });
+try {
+  // Use local tsc binary first to avoid version mismatch
+  const localTsc = path.resolve(__dirname, '../node_modules/.bin/tsc');
+  if (fs.existsSync(localTsc)) {
+    execSync(`"${localTsc}"`, { stdio: 'inherit', env: process.env });
+  } else {
+    execSync('npx tsc', { stdio: 'inherit', env: process.env });
+  }
+} catch (e) {
+  execSync('npx tsc', { stdio: 'inherit', env: process.env });
+}
 
 console.log('✅ [Build] Backend built successfully!');
