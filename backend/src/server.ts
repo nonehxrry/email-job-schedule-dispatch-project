@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
@@ -51,22 +53,35 @@ async function startServer() {
     // 4. Mount Master API Routes
     app.use('/api', routes);
 
-    // 5. Global Error Handler
+    // 5. Serve Frontend Static Assets if Built (Production Deployment Support)
+    const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
+    if (fs.existsSync(frontendDistPath)) {
+      app.use(express.static(frontendDistPath));
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/admin')) {
+          return next();
+        }
+        res.sendFile(path.join(frontendDistPath, 'index.html'));
+      });
+      console.log(`[Static] Serving frontend production build from ${frontendDistPath}`);
+    }
+
+    // 6. Global Error Handler
     app.use(errorHandler);
 
-    // 6. Initialize SMTP Transporter
+    // 7. Initialize SMTP Transporter
     await initSmtpTransporter();
 
-    // 7. Initialize Elasticsearch Indexing
+    // 8. Initialize Elasticsearch Indexing
     await initElasticsearch();
 
-    // 8. Start BullMQ Email Worker
+    // 9. Start BullMQ Email Worker
     emailWorkerService.initWorker();
 
-    // 9. Recover Any Pending / Scheduled Jobs from Previous Run (Crash Resilience)
+    // 10. Recover Any Pending / Scheduled Jobs from Previous Run (Crash Resilience)
     await queueService.recoverPendingJobsOnBoot();
 
-    // 10. Start HTTP Server
+    // 11. Start HTTP Server
     const server = app.listen(env.PORT, () => {
       console.log('============================================================');
       console.log(`✅ Backend API Server running at:     http://localhost:${env.PORT}`);
