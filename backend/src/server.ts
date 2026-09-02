@@ -64,6 +64,17 @@ async function startServer() {
         res.sendFile(path.join(frontendDistPath, 'index.html'));
       });
       console.log(`[Static] Serving frontend production build from ${frontendDistPath}`);
+    } else {
+      // Friendly root status endpoint when deployed as standalone backend
+      app.get('/', (req: express.Request, res: express.Response) => {
+        res.status(200).json({
+          service: 'ReachInbox Full-Stack Email Job Scheduler API',
+          status: 'ONLINE',
+          bullBoardLiveMonitor: '/admin/queues',
+          apiHealth: '/api/health',
+          timestamp: new Date().toISOString(),
+        });
+      });
     }
 
     // 6. Global Error Handler
