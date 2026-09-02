@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { redisClient } from '../config/redis.config';
+import { redisConnectionOptions } from '../config/redis.config';
 import { EmailJobData } from '../types';
 import { QUEUE_NAME, queueService } from './queue.service';
 import { rateLimiterService } from './ratelimiter.service';
@@ -153,7 +153,7 @@ export class EmailWorkerService {
         }
       },
       {
-        connection: redisClient as any,
+        connection: redisConnectionOptions,
         concurrency: env.WORKER_CONCURRENCY,
       }
     );

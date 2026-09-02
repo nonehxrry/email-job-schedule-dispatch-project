@@ -1,4 +1,4 @@
-import { redisClient } from '../config/redis.config';
+import { getRedisClient } from '../config/redis.config';
 import { RateLimitCheckResult } from '../types';
 
 export class RateLimiterService {
@@ -29,10 +29,11 @@ export class RateLimiterService {
   public async checkAndConsume(senderEmail: string, limitPerHour: number): Promise<RateLimitCheckResult> {
     const now = new Date();
     const { key, resetTimeMs } = this.getWindowKey(senderEmail, now);
+    const redis = getRedisClient();
 
     try {
       // Use Redis transaction to atomically increment and ensure TTL
-      const pipeline = redisClient.pipeline();
+      const pipeline = redis.pipeline();
       pipeline.incr(key);
       pipeline.ttl(key);
       const results = await pipeline.exec();
@@ -42,7 +43,7 @@ export class RateLimiterService {
 
       // If key had no TTL (new key), set TTL to 2 hours (7200s)
       if (ttl === -1) {
-        await redisClient.expire(key, 7200);
+        await redis.expire(key, 7200);
       }
 
       if (count > limitPerHour) {
@@ -80,8 +81,9 @@ export class RateLimiterService {
    */
   public async getCurrentUsage(senderEmail: string): Promise<{ count: number; resetTimeMs: number }> {
     const { key, resetTimeMs } = this.getWindowKey(senderEmail, new Date());
+    const redis = getRedisClient();
     try {
-      const val = await redisClient.get(key);
+      const val = await redis.get(key);
       return { count: val ? parseInt(val, 10) : 0, resetTimeMs };
     } catch {
       return { count: 0, resetTimeMs };

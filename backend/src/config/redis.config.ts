@@ -18,6 +18,10 @@ export let redisConnectionOptions: RedisOptions = {
 
 export let redisClient: Redis = new Redis(redisConnectionOptions);
 
+export function getRedisClient(): Redis {
+  return redisClient;
+}
+
 export async function initRedis(): Promise<Redis> {
   // 1. First test if external Redis is already running on port 6379
   try {
