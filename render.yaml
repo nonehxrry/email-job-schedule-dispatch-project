@@ -4,14 +4,16 @@ services:
     runtime: node
     plan: free
     buildCommand: npm run install:all && npm run build
-    startCommand: cd backend && npx prisma db push && node dist/server.js
+    startCommand: cd backend && node dist/server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 5000
+      - key: DATABASE_URL
+        value: file:./dev.db
       - key: CLIENT_URL
-        value: https://reachinbox-email-scheduler.onrender.com
+        value: "*"
       - key: JWT_SECRET
         generateValue: true
       - key: WORKER_CONCURRENCY
