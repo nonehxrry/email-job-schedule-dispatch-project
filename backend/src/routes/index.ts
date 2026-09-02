@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import authRoutes from './auth.routes';
 import campaignRoutes from './campaign.routes';
 import emailRoutes from './email.routes';
@@ -16,7 +16,7 @@ router.use('/track', trackingRoutes);
 router.use('/accounts', accountRoutes);
 
 // Health check endpoint
-router.get('/health', (req, res) => {
+router.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),

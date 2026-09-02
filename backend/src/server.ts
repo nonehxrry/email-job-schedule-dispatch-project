@@ -57,7 +57,7 @@ async function startServer() {
     const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
     if (fs.existsSync(frontendDistPath)) {
       app.use(express.static(frontendDistPath));
-      app.get('*', (req, res, next) => {
+      app.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/admin')) {
           return next();
         }
