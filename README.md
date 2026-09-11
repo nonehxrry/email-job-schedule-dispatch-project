@@ -174,7 +174,7 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## 🧪 Running the Automated Verification Suite
+## Running the Automated Verification Suite
 
 To run the complete automated test suite verifying Rate Limiting, BullMQ window resets, Ethereal SMTP dispatch, and DB persistence:
 
