@@ -6,7 +6,7 @@ A production-grade distributed email scheduler service and real-time dashboard b
 
 ## Key Features
 
-### 1. ⏱️ Cron-Free Persistent Scheduling (BullMQ + Redis)
+### 1. Cron-Free Persistent Scheduling (BullMQ + Redis)
 - **Zero Cron Jobs**: Uses native **BullMQ delayed jobs** backed by Redis streams and sorted sets.
 - **Restart Resilience**: When the server crashes or restarts, pending jobs resume from Redis and the relational database without lost dispatches or duplicate sends (idempotency keying).
 - **Staggered Dispatch**: When batch campaigns are scheduled, each lead is dynamically assigned a calculated delay:
