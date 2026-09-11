@@ -121,7 +121,7 @@ reachinbox-scheduler/
 
 ---
 
-## ⚡ Quick Start Guide
+## Quick Start Guide
 
 ### Prerequisites
 - **Node.js**: v18+ (Tested on v22.16.0)
