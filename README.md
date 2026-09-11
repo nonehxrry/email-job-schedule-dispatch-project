@@ -4,7 +4,7 @@ A production-grade distributed email scheduler service and real-time dashboard b
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
 ### 1. ⏱️ Cron-Free Persistent Scheduling (BullMQ + Redis)
 - **Zero Cron Jobs**: Uses native **BullMQ delayed jobs** backed by Redis streams and sorted sets.
