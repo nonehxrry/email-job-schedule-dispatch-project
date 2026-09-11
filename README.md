@@ -186,21 +186,21 @@ npx tsx src/test-runner.ts
 **Expected output:**
 ```text
 ============================================================
-🧪 REACHINBOX TEST SUITE & SYSTEM VERIFICATION
+REACHINBOX TEST SUITE & SYSTEM VERIFICATION
 ============================================================
-📦 Step 1: Initializing Redis & SMTP Engine...
-🔒 Step 2: Testing Hourly Rate Limiter Window & Counters...
-  ✅ [PASS] First email send is allowed (1/3)
-  ✅ [PASS] Second email send is allowed (2/3)
-  ✅ [PASS] Third email send is allowed (3/3)
-  ✅ [PASS] Fourth email is blocked and returns next hour reset timestamp
-📧 Step 3: Testing Nodemailer Ethereal SMTP Dispatch...
-  ✅ [PASS] Message ID generated
-  ✅ [PASS] Ethereal preview URL created
-💾 Step 4: Testing Database Persistence...
-  ✅ [PASS] Job successfully saved and queried from Database
+Step 1: Initializing Redis & SMTP Engine...
+Step 2: Testing Hourly Rate Limiter Window & Counters...
+  [PASS] First email send is allowed (1/3)
+  [PASS] Second email send is allowed (2/3)
+  [PASS] Third email send is allowed (3/3)
+  [PASS] Fourth email is blocked and returns next hour reset timestamp
+Step 3: Testing Nodemailer Ethereal SMTP Dispatch...
+  [PASS] Message ID generated
+  [PASS] Ethereal preview URL created
+Step 4: Testing Database Persistence...
+  [PASS] Job successfully saved and queried from Database
 ============================================================
-🏁 TEST RESULTS: 7 PASSED, 0 FAILED
+TEST RESULTS: 7 PASSED, 0 FAILED
 ============================================================
 ```
 
