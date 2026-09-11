@@ -23,19 +23,19 @@ A production-grade distributed email scheduler service and real-time dashboard b
 - Automatically posts a structured alert message to the user's Slack channel the moment an hourly limit is breached with sender metrics and deferred timestamps.
 - Features Redis anti-spam cooldown locks (60s) to prevent spamming Slack during high-volume batch bursts.
 
-### 4. 🔍 Sub-Millisecond Search with Elasticsearch
+### 4. Sub-Millisecond Search with Elasticsearch
 - Indexes all scheduled and sent emails into Elasticsearch (`reachinbox_emails` index).
 - Full-text search with fuzzy matching across `subject`, `body`, `recipientEmail`, and `recipientName`.
 - Resilient fallback to PostgreSQL full-text queries if Elasticsearch is starting up.
 
-### 5. 📬 Ethereal SMTP Integration
+### 5. Ethereal SMTP Integration
 - Dispatches emails using Ethereal Email test accounts.
 - Generates live clickable web preview URLs for every sent email in the dashboard.
 
-### 6. 📊 Live Queue Monitoring (Bull-Board)
+### 6. Live Queue Monitoring (Bull-Board)
 - Embedded Bull-Board dashboard at `/admin/queues` providing real-time visibility into active, waiting, delayed, completed, and failed queues.
 
-### 7. 💻 Interactive React + Tailwind Dashboard
+### 7. Interactive React + Tailwind Dashboard
 - **Google OAuth Login** + One-click Reviewer Demo Sign-In.
 - **Tabs**: Scheduled Emails & Sent Emails with real-time status updates and live search.
 - **Compose Modal**:
@@ -44,7 +44,7 @@ A production-grade distributed email scheduler service and real-time dashboard b
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```
                                   +-----------------------+
@@ -83,7 +83,7 @@ A production-grade distributed email scheduler service and real-time dashboard b
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 reachinbox-scheduler/
