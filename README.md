@@ -18,7 +18,7 @@ A production-grade distributed email scheduler service and real-time dashboard b
 - **Hourly Quota per Sender**: Atomic Redis hourly window counters (`rl:sender:{email}:{YYYY-MM-DD-HH}`).
 - **Intelligent Rescheduling**: When a sender hits `MAX_EMAILS_PER_HOUR_PER_SENDER`, overflow jobs are **not dropped or failed**. They are automatically deferred and re-enqueued to the start of the next hour window, preserving queue order.
 
-### 3. 💬 Real-Time Slack Notifications on Rate Limit
+### 3. Real-Time Slack Notifications on Rate Limit
 - Real OAuth authorize flow & webhook support.
 - Automatically posts a structured alert message to the user's Slack channel the moment an hourly limit is breached with sender metrics and deferred timestamps.
 - Features Redis anti-spam cooldown locks (60s) to prevent spamming Slack during high-volume batch bursts.
