@@ -206,7 +206,7 @@ TEST RESULTS: 7 PASSED, 0 FAILED
 
 ---
 
-## 🔄 Demonstrating Server Restart Resilience
+## Demonstrating Server Restart Resilience
 
 1. Open the Dashboard at `http://localhost:5173` and click **"Compose Email"**.
 2. Upload or paste 10 lead emails, select **"Schedule for Later"** (e.g. 5 minutes from now), set **Delay** to `5 seconds`, and click **"Schedule Emails"**.
@@ -220,7 +220,7 @@ TEST RESULTS: 7 PASSED, 0 FAILED
 
 ---
 
-## 🛡️ Demonstrating Rate Limiting & Slack Notification Under Load
+## Demonstrating Rate Limiting & Slack Notification Under Load
 
 1. In the **Compose Modal**, set **Hourly Limit** to `5` and paste a list of 15 email addresses.
 2. Click **"Dispatch Emails"**.
