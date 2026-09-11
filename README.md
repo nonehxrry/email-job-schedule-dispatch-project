@@ -232,7 +232,7 @@ TEST RESULTS: 7 PASSED, 0 FAILED
 
 ---
 
-## 📡 API Reference
+## API Reference
 
 ### Authentication
 - `POST /api/auth/google`: Verify Google credential token and return JWT session.
@@ -258,7 +258,7 @@ TEST RESULTS: 7 PASSED, 0 FAILED
 
 ---
 
-## 💡 Trade-Offs & Architecture Decisions
+## Trade-Offs & Architecture Decisions
 1. **Sliding Hour Rate Limiter vs Token Bucket**: We implemented atomic Redis hourly window counters with TTLs (`rl:sender:{email}:{YYYY-MM-DD-HH}`). This aligns with provider quotas (e.g. 50/hr), and guarantees deterministic next-hour calculation (`resetTimeMs = nextHourStart`).
 2. **Delayed Jobs vs Polling**: We strictly avoided cron polling. BullMQ's Redis sorted set delay mechanism is $O(\log N)$ in insertion and retrieval, reducing database load to zero during idle periods.
 3. **Idempotency Keys**: We enforce job UUIDs at both the BullMQ level (`jobId = dbJob.id`) and worker verification level to guarantee emails are never sent twice.
