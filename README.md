@@ -12,7 +12,7 @@ A production-grade distributed email scheduler service and real-time dashboard b
 - **Staggered Dispatch**: When batch campaigns are scheduled, each lead is dynamically assigned a calculated delay:
   $$\text{delay}_i = \max(0, \text{startTime} - \text{now}) + (i \times \text{delayBetweenEmails})$$
 
-### 2. 🛡️ Concurrency, Throttling & Sliding-Hour Rate Limiting
+### 2. Concurrency, Throttling & Sliding-Hour Rate Limiting
 - **Worker Concurrency**: Configurable concurrent job processing threads (`WORKER_CONCURRENCY=5`).
 - **Inter-Email Throttling**: Mandatory minimum delay between sequential email sends (`EMAIL_SEND_DELAY_MS=2000`) to prevent SMTP throttling.
 - **Hourly Quota per Sender**: Atomic Redis hourly window counters (`rl:sender:{email}:{YYYY-MM-DD-HH}`).
