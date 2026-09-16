@@ -1,4 +1,3 @@
-
 # ReachInbox Full-Stack Email Job Scheduler
 
 A production-grade distributed email scheduler service and real-time dashboard built for high-throughput outreach campaigns. Built with **Node.js, Express, TypeScript, BullMQ, Redis, PostgreSQL (Prisma), Elasticsearch, Ethereal SMTP, and React + Tailwind CSS**.
